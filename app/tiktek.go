@@ -19,7 +19,7 @@ type Board struct {
 type Client struct {
 	Type  string          `json:"type"`
 	Conn  *websocket.Conn `json:"conn"`
-	state bool            `json:"state"`
+	State string          `json:"state"`
 }
 
 type Message struct {
@@ -34,7 +34,13 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 var clients = make(map[*Client]bool)
-var broadcastTik = make(chan Message)
+var TikChan = make(chan Message)
+var ClearChan = make(chan bool)
+var PlayerChan = make(chan Message)
+
+var turn = "X"
+var PM = make(chan int)
+var count = 0
 
 func WsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
@@ -45,10 +51,15 @@ func WsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var client Client
 	client.Conn = conn
-	client.Type = "user"
 	clients[&client] = true
+	PM <- 1
 
-	conn.WriteJSON(client)
+	defer func() {
+		PM <- -1
+		delete(clients, &client)
+		conn.Close()
+	}()
+
 	conn.WriteJSON(NowTikStateMongo(mongoClient))
 
 	for {
@@ -56,26 +67,29 @@ func WsHandler(w http.ResponseWriter, r *http.Request) {
 		conn.ReadJSON(&m)
 		switch m.Type {
 		case "user":
-			client.state = m.Data.(bool)
+			client.State = m.Data.(string)
+			PlayerChan <- Message{Type: "player", Data: client.State}
 		case "board":
-			if client.state {
-				broadcastTik <- m
+			if client.State == turn {
+				TikChan <- m
 			}
+		case "clear":
+			DeleteTikMongo(mongoClient)
+			InitTikMongo(mongoClient)
+			ClearChan <- true
 		}
 	}
 }
 
 func HandleTik() {
 	mongoClient = MongoOpen()
-	defer MongoClose(mongoClient)
 
 	DeleteTikMongo(mongoClient)
 	InitTikMongo(mongoClient)
 
-	turn := "X"
 	for {
 		var win Message
-		m := <-broadcastTik
+		m := <-TikChan
 		win.Type = UpdateOneTikMongo(mongoClient, m, turn)
 
 		for client := range clients {
@@ -83,7 +97,7 @@ func HandleTik() {
 			client.Conn.WriteJSON(m)
 			if win.Type != "" {
 				client.Conn.WriteJSON(win)
-				client.state = false
+				client.State = ""
 			}
 		}
 
@@ -91,6 +105,40 @@ func HandleTik() {
 			turn = "O"
 		} else {
 			turn = "X"
+		}
+	}
+}
+
+func ClearTik() {
+	<-ClearChan
+	turn = "X"
+	for client := range clients {
+		client.State = ""
+		client.Conn.WriteJSON(NowTikStateMongo(mongoClient))
+		client.Conn.WriteJSON(Message{Type: "clear"})
+	}
+}
+
+func UserCount() {
+	for {
+		now := <-PM
+		count += now
+		for client := range clients {
+			err := client.Conn.WriteJSON(Message{Type: "userCount", Data: count})
+			if err != nil {
+				fmt.Println("Failed to send message to client: ", err)
+				delete(clients, client)
+				client.Conn.Close()
+			}
+		}
+	}
+}
+
+func PlayerTik() {
+	for {
+		m := <-PlayerChan
+		for client := range clients {
+			client.Conn.WriteJSON(m)
 		}
 	}
 }

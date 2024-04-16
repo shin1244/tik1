@@ -15,6 +15,9 @@ func main() {
 	mux.Get("/ws", app.WsHandler)
 
 	go app.HandleTik()
+	go app.ClearTik()
+	go app.UserCount()
+	go app.PlayerTik()
 
 	n := negroni.Classic()
 	n.UseHandler(mux)

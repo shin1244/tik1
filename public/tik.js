@@ -9,9 +9,27 @@ $(function(){
         ws.onmessage = function(e) {
             var dataValue = JSON.parse(e.data);
             switch (dataValue.type) {
+                case "clear":
+                    $("#play1").on("click");
+                    $("#play1").html("플레이어1");
+                    $("#play2").on("click");
+                    $("#play2").html("플레이어2");
+                    break
+                case "player":
+                    if (dataValue.data == "X"){
+                        $("#play1").off("click");
+                        $("#play1").html("가득참!");
+                    } else if (dataValue.data == "O"){
+                        $("#play2").off("click");
+                        $("#play2").html("가득참!");
+                    }
+                    break
                 case "nowBoard":
                     tiktekto(dataValue)
                     break
+                case "userCount":
+                    usercount(dataValue.data)
+                    break;
                 case "board":
                     if (dataValue.turn == "X") {
                         $("#"+dataValue.data).html("X");
@@ -19,14 +37,13 @@ $(function(){
                         $("#"+dataValue.data).html("O");
                     }
                     break
-                case "user":
-                    console.log(dataValue)
-                    break
                 case "O":
                     $("#winner").html("O Win")
+                    disableClickEvent()
                     break
                 case "X":
                     $("#winner").html("X Win")
+                    disableClickEvent()
                     break
             }
         };
@@ -47,15 +64,24 @@ $(function(){
     });
 
     $("#re").click(function() {
-        $("#board tr").each(function() {
-            $(this).find("td").text("");
-        });
+        ableClickEvent()
+        ws.send(JSON.stringify({
+            type: "clear",
+        }))
     });
 
-    $("#play").click(function() {
+    $("#play1").click(function() {
         ws.send(JSON.stringify({
             type: "user",
-            data: true
+            data: "X"
+            }))
+        });
+
+    $("#play2").click(function() {
+        $("#play2").off("click");
+        ws.send(JSON.stringify({
+            type: "user",
+            data: "O"
             }))
         });
     })
@@ -63,12 +89,23 @@ $(function(){
 
 
 function tiktekto(data) {
-    for (let index = 0; index < data.x.length; index++) {
-        const element = data.x[index];
-        $("#"+String(element)).html("X")
+    for (let index = 1; index < 10; index++) {
+        if (data.x.indexOf(index) !== -1) {
+            $("#"+String(index)).html("X")
+        } else if (data.o.indexOf(index) !== -1) {
+            $("#"+String(index)).html("O")
+        } else {
+            $("#"+String(index)).html("")
+        }
     }
-    for (let index = 0; index < data.o.length; index++) {
-        const element = data.o[index];
-        $("#"+String(element)).html("O")
-    }
+}
+
+function disableClickEvent() {
+    $("td").off("click");
+}
+function ableClickEvent() {
+    $("td").on("click");
+}
+usercount = function(data) {
+    $('#users').html('<b>유저수: '+data+'</b>');
 }
