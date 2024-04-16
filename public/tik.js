@@ -4,67 +4,29 @@ $(function(){
         return
     }
 
-    function tiktekto(data) {
-        var dataData = data.data;
-        var dataTurn = data.turn;
-
-        if ($("#"+dataData).html().trim() === "") {
-            if (dataTurn == "X") {
-                $("#"+dataData).html("X");
-                XorO = "O";
-            } else {
-                $("#"+dataData).html("O");
-                XorO = "X";
-            }
-        }
-
-        winner = checkWinner()
-        if(winner != null) {
-            $("#winner").html("Winner: "+winner);
-        }
-    }
-
-    function checkWinner() {
-        var board = [];
-    
-        $("#board tr").each(function() {
-            var row = [];
-            $(this).find("td").each(function() {
-                row.push($(this).text().trim());
-            });
-            board.push(row);
-        });
-    
-        for (var i = 0; i < 3; i++) {
-            if (board[i][0] !== "" && board[i][0] === board[i][1] && board[i][0] === board[i][2]) {
-                return board[i][0]; 
-            }
-            if (board[0][i] !== "" && board[0][i] === board[1][i] && board[0][i] === board[2][i]) {
-                return board[0][i];
-            }
-        }
-        if (board[0][0] !== "" && board[0][0] === board[1][1] && board[0][0] === board[2][2]) {
-            return board[0][0];
-        }
-        if (board[0][2] !== "" && board[0][2] === board[1][1] && board[0][2] === board[2][0]) {
-            return board[0][2];
-        }
-    
-        return null;
-    }
-
-    var XorO = "X"
-
     connect = function() {
         ws = new WebSocket("ws://" + window.location.host + "/ws");
         ws.onmessage = function(e) {
             var dataValue = JSON.parse(e.data);
             switch (dataValue.type) {
-                case "board":
+                case "nowBoard":
                     tiktekto(dataValue)
+                    break
+                case "board":
+                    if (dataValue.turn == "X") {
+                        $("#"+dataValue.data).html("X");
+                    } else {
+                        $("#"+dataValue.data).html("O");
+                    }
                     break
                 case "user":
                     console.log(dataValue)
+                    break
+                case "O":
+                    $("#winner").html("O Win")
+                    break
+                case "X":
+                    $("#winner").html("X Win")
                     break
             }
         };
@@ -73,18 +35,18 @@ $(function(){
     connect();
 
     $("td").click(function() {
+        if ($(this).text().trim() === "") {
         var cellId = $(this).attr("id");
         if (ws.readyState === ws.OPEN) {
             ws.send(JSON.stringify({
                 type: "board",
-                data: cellId[-1],
-                turn: XorO
+                data: cellId,
             }));
         }
+    }
     });
 
     $("#re").click(function() {
-        XorO = "X"
         $("#board tr").each(function() {
             $(this).find("td").text("");
         });
@@ -97,3 +59,16 @@ $(function(){
             }))
         });
     })
+
+
+
+function tiktekto(data) {
+    for (let index = 0; index < data.x.length; index++) {
+        const element = data.x[index];
+        $("#"+String(element)).html("X")
+    }
+    for (let index = 0; index < data.o.length; index++) {
+        const element = data.o[index];
+        $("#"+String(element)).html("O")
+    }
+}

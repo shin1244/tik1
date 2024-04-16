@@ -5,7 +5,16 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	"go.mongodb.org/mongo-driver/mongo"
 )
+
+var mongoClient mongo.Client
+
+type Board struct {
+	Type string `json:"type"`
+	O    []int  `json:"o"`
+	X    []int  `json:"x"`
+}
 
 type Client struct {
 	Type  string          `json:"type"`
@@ -38,9 +47,9 @@ func WsHandler(w http.ResponseWriter, r *http.Request) {
 	client.Conn = conn
 	client.Type = "user"
 	clients[&client] = true
-	defer delete(clients, &client)
 
 	conn.WriteJSON(client)
+	conn.WriteJSON(NowTikStateMongo(mongoClient))
 
 	for {
 		var m Message
@@ -48,7 +57,6 @@ func WsHandler(w http.ResponseWriter, r *http.Request) {
 		switch m.Type {
 		case "user":
 			client.state = m.Data.(bool)
-			fmt.Println(client)
 		case "board":
 			if client.state {
 				broadcastTik <- m
@@ -58,15 +66,31 @@ func WsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleTik() {
+	mongoClient = MongoOpen()
+	defer MongoClose(mongoClient)
+
+	DeleteTikMongo(mongoClient)
+	InitTikMongo(mongoClient)
+
+	turn := "X"
 	for {
+		var win Message
 		m := <-broadcastTik
+		win.Type = UpdateOneTikMongo(mongoClient, m, turn)
+
 		for client := range clients {
-			err := client.Conn.WriteJSON(m)
-			if err != nil {
-				fmt.Println("Failed to send message to client: ", err)
-				delete(clients, client)
-				client.Conn.Close()
+			m.Turn = turn
+			client.Conn.WriteJSON(m)
+			if win.Type != "" {
+				client.Conn.WriteJSON(win)
+				client.state = false
 			}
+		}
+
+		if turn == "X" {
+			turn = "O"
+		} else {
+			turn = "X"
 		}
 	}
 }

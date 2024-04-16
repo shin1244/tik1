@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"mongo/tiktekto/app.go"
+	"mongo/tik/app"
 
 	"github.com/gorilla/pat"
 	"github.com/urfave/negroni"
